@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Minecraft Web MVP</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #87CEEB;
+      font-family: 'Minecraft', 'Courier New', monospace, sans-serif;
+    }
+
+    #gameCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Crosshair */
+    #crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 20px;
+      height: 20px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    #crosshair::before, #crosshair::after {
+      content: '';
+      position: absolute;
+      background: rgba(255, 255, 255, 0.85);
+      box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+    }
+
+    #crosshair::before {
+      top: 9px;
+      left: 0;
+      width: 20px;
+      height: 2px;
+    }
+
+    #crosshair::after {
+      top: 0;
+      left: 9px;
+      width: 2px;
+      height: 20px;
+    }
+
+    /* Hotbar */
+    #hotbar {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 4px;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 6px;
+      border-radius: 8px;
+      border: 2px solid #555;
+      z-index: 10;
+    }
+
+    .slot {
+      width: 50px;
+      height: 50px;
+      background: rgba(139, 139, 139, 0.5);
+      border: 3px solid #373737;
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      position: relative;
+      transition: transform 0.1s;
+    }
+
+    .slot.active {
+      border-color: #ffffff;
+      background: rgba(255, 255, 255, 0.3);
+      transform: scale(1.1);
+      box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+    }
+
+    .slot-icon {
+      width: 30px;
+      height: 30px;
+      image-rendering: pixelated;
+      box-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+    }
+
+    .slot-key {
+      position: absolute;
+      top: 2px;
+      left: 4px;
+      font-size: 10px;
+      color: #ddd;
+      font-weight: bold;
+      text-shadow: 1px 1px 1px #000;
+    }
+
+    /* HUD Info */
+    #hud {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      color: white;
+      font-size: 13px;
+      text-shadow: 1px 1px 2px #000;
+      line-height: 1.6;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 8px 12px;
+      border-radius: 6px;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* Instruction Screen / Pause Menu */
+    #blocker {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.65);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      z-index: 20;
+      cursor: pointer;
+      backdrop-filter: blur(3px);
+    }
+
+    #instructions {
+      background: rgba(30, 30, 30, 0.9);
+      border: 3px solid #555;
+      border-radius: 12px;
+      padding: 30px 40px;
+      text-align: center;
+      max-width: 540px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+    }
+
+    #instructions h1 {
+      font-size: 28px;
+      margin-bottom: 12px;
+      color: #55FF55;
+      text-shadow: 2px 2px #000;
+      letter-spacing: 1px;
+    }
+
+    #instructions p {
+      font-size: 14px;
+      color: #ccc;
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+
+    .key-guide {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px 16px;
+      text-align: left;
+      font-size: 13px;
+      margin: 15px 0 25px;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 12px 16px;
+      border-radius: 6px;
+    }
+
+    .key-badge {
+      background: #444;
+      border: 1px solid #777;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #FFF;
+      font-weight: bold;
+      text-align: center;
+      display: inline-block;
+      min-width: 22px;
+    }
+
+    .start-btn {
+      background: #55AA55;
+      border: 2px solid #AAFFAA;
+      color: white;
+      padding: 12px 28px;
+      font-size: 16px;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+      box-shadow: 0 4px 0 #226622;
+      transition: all 0.1s;
+    }
+
+    .start-btn:hover {
+      background: #66BB66;
+    }
+
+    .start-btn:active {
+      transform: translateY(2px);
+      box-shadow: 0 2px 0 #226622;
+    }
+
+    /* Hand / held item preview */
+    #heldItem {
+      position: absolute;
+      bottom: -15px;
+      right: 60px;
+      width: 140px;
+      height: 140px;
+      pointer-events: none;
+      z-index: 10;
+      transform-origin: bottom right;
+      transform: rotate(-15deg);
+      transition: transform 0.15s ease;
+    }
+
+    .swing {
+      animation: swingHand 0.15s ease-in-out;
+    }
+
+    @keyframes swingHand {
+      0% { transform: rotate(-15deg) translateY(0); }
+      50% { transform: rotate(-45deg) translateY(30px) translateX(-20px); }
+      100% { transform: rotate(-15deg) translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 3D Canvas -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- Crosshair -->
+  <div id="crosshair"></div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div><strong>3D Minecraft Web MVP</strong></div>
+    <div id="posText">XYZ: 0.0, 0.0, 0.0</div>
+    <div id="modeText">モード: サバイバル (F: 飛行切替)</div>
+    <div id="blockCountText">ブロック数: 0</div>
+  </div>
+
+  <!-- Held Item Preview -->
+  <canvas id="heldItem" width="120" height="120"></canvas>
+
+  <!-- Hotbar -->
+  <div id="hotbar"></div>
+
+  <!-- Start & Instructions Screen -->
+  <div id="blocker">
+    <div id="instructions">
+      <h1>3D MINECRAFT WEB</h1>
+      <p>ブラウザで動くボクセルクラフトMVP</p>
+      
+      <div class="key-guide">
+        <div><span class="key-badge">W</span> <span class="key-badge">A</span> <span class="key-badge">S</span> <span class="key-badge">D</span></div>
+        <div>移動</div>
+
+        <div><span class="key-badge">Space</span></div>
+        <div>ジャンプ（飛行時は上昇）</div>
+
+        <div><span class="key-badge">Shift</span></div>
+        <div>下降（飛行時）</div>
+
+        <div><span class="key-badge">左クリック</span></div>
+        <div>ブロックを採掘・破壊</div>
+
+        <div><span class="key-badge">右クリック</span></div>
+        <div>ブロックを設置</div>
+
+        <div><span class="key-badge">1</span> 〜 <span class="key-badge">9</span> / ホイール</div>
+        <div>持ち物（ブロック）切り替え</div>
+
+        <div><span class="key-badge">F</span></div>
+        <div>飛行モード (クリエイティブ) 切替</div>
+
+        <div><span class="key-badge">R</span></div>
+        <div>ワールド再生成</div>
+      </div>
+
+      <button class="start-btn">クリックしてワールドに入る</button>
+    </div>
+  </div>
+
+  <!-- Three.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <script>
+    /* ==========================================================
+       1. サウンド合成システム (Web Audio API)
+       ========================================================== */
+    let audioCtx = null;
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function playDigSound() {
+      if (!audioCtx) return;
+      // ノイズ＋低音ポップで破壊音を合成
+      const bufferSize = audioCtx.sampleRate * 0.08;
+      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.25));
+      }
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = buffer;
+
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 600 + Math.random() * 300;
+
+      const gain = audioCtx.createGain();
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(audioCtx.destination);
+      noise.start();
+    }
+
+    function playPlaceSound() {
+      if (!audioCtx) return;
+      // ピッチダウンする低音パルスで設置音を合成
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(240 + Math.random() * 40, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.07);
+
+      gain.gain.setValueAtTime(0.35, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.07);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.08);
+    }
+
+    function playJumpSound() {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.08);
+
+      gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.09);
+    }
+
+    /* ==========================================================
+       2. プロシージャル・ピクセルテクスチャ生成
+       ========================================================== */
+    function createPixelCanvas(drawFunc) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 16;
+      canvas.height = 16;
+      const ctx = canvas.getContext('2d');
+      drawFunc(ctx);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.magFilter = THREE.NearestFilter;
+      texture.minFilter = THREE.NearestFilter;
+      return { texture, canvas };
+    }
+
+    // 草ブロック上面
+    const grassTop = createPixelCanvas(ctx => {
+      ctx.fillStyle = '#5c9636';
+      ctx.fillRect(0, 0, 16, 16);
+      for (let i = 0; i < 60; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? '#6da83f' : '#4d822d';
+        ctx.fillRect(Math.floor(Math.random() * 16), Math.floor(Math.random() * 16), 1, 1);
+      }
+    });
+
+    // 草ブロック側面 (上部緑、下部土)
+    const grassSide = createPixelCanvas(ctx => {
+      // 土ベース
+      ctx.fillStyle = '#866043';
+      ctx.fillRect(0, 0, 16, 16);
+      for (let i = 0; i < 50; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? '#755238' : '#9c7352';
+        ctx.fillRect(Math.floor(Math.random() * 16), Math.floor(Math.random() * 16), 1, 1);
+      }
+      // 上部の草の垂れ下がり
+      ctx.fillStyle = '#5c9636';
+      for (let x = 0; x < 16; x++) {
+        const h = 2 + Math.floor(Math.random() * 3);
+        ctx.fillRect(x, 0, 1, h);
+      }
+    });
+
+    // 土
+    const dirt = createPixelCanvas(ctx => {
+      ctx.fillStyle = '#866043';
+      ctx.fillRect(0, 0, 16, 16);
+      for (let i = 0; i < 70; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? '#755238' : '#9c7352';
+        ctx.fillRect(Math.floor(Math.random() * 16), Math.floor(Math.random() * 16), 1, 1);
+      }
+    });
+
+    // 石
+    const stone = createPixelCanvas(ctx => {
+      ctx.fillStyle = '#808080';
+      ctx.fillRect(0, 0, 16, 16);
+      for (let i = 0; i < 80; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? '#6e6e6e' : '#949494';
+        ctx.fillRect(Math.floor(Math.random() * 16), Math.floor(Math.random() * 16), 1, 1);
+      }
+    });
+
+    // 原木（側面）
+    const woodSide = createPixelCanvas(ctx => {
+      ctx.fillStyle = '#65482d';
+      ctx.fillRect(0, 0, 16, 16);
+      for (let x = 0; x < 16; x++) {
+        const col = x % 4 === 0 ? '#4e3722' : (x % 4 === 2 ? '#745334' : '#65482d');
+        ctx.fillStyle = col;
+        ctx.fillRect(x, 0, 1, 16);
+      }
+      for (let i = 0; i < 40; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? '#3e2c1a' : '#7c5a39';
+        ctx.fillRect(Math.floor(Math.random() * 16), Math.floor(Math.random() * 16), 1, 1);
+      }
+    });
+
+    // 原木（上下面・年輪）
+    const woodTop = createPixelCanvas(ctx => {
+      ctx.fillStyle = '#a6855b';
+      ctx.fillRect(0, 0, 16, 16);
+      ctx.fillStyle = '#523a23';
+      ctx.strokeRect(0.5, 0.5, 15, 15);
+      ctx.fillStyle = '#8a6a42';
+      ctx.fillRect(3, 3, 10, 10);
+      ctx.fillStyle = '#a6855b';
+      ctx.fillRect(5, 5, 6, 6);
+      ctx.fillStyle = '#6e5130';
+      ctx.fillRect(7, 7, 2, 2);
+    });
+
+    // 葉
+    const leaves = createPixelCanvas(ctx => {
+      ctx.fillStyle = '#347822';
+      ctx.fillRect(0, 0, 16, 16);
+      for (let i = 0; i < 80; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? '#286118' : '#458c2f';
+        ctx.fillRect(Math.floor(Math.random() * 16), Math.floor(Math.random() * 16), 1, 1);
+      }
+      for (let i = 0; i < 15; i++) {
+        ctx.fillStyle = '#1c4510';
+        ctx.fillRect(Math.floor(Math.random() * 16), Math.floor(Math.random() * 16), 1, 1);
+      }
+    });
+
+    // 木の板
+    const planks = createPixelCanvas(ctx => {
+      ctx.fillStyle = '#b18c54';
+      ctx.fillRect(0, 0, 16, 16);
+      ctx.fillStyle = '#7a5a30';
+      // 横板の区切り
+      for (let y = 3; y < 16; y += 4) {
+        ctx.fillRect(0, y, 16, 1);
+      }
+      for (let i = 0; i < 40; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? '#9f7b44' : '#c29d64';
+        ctx.fillRect(Math.floor(Math.random() * 16), Math.floor(Math.random() * 16), 1, 1);
+      }
+    });
+
+    // レンガ
+    const brick = createPixelCanvas(ctx => {
+      ctx.fillStyle = '#b75b42';
+      ctx.fillRect(0, 0, 16, 16);
+      // 目地
+      ctx.fillStyle = '#d8cfc4';
+      for (let y = 0; y < 16; y += 4) {
+        ctx.fillRect(0, y, 16, 1);
+      }
+      ctx.fillRect(0, 0, 1, 4);
+      ctx.fillRect(8, 0, 1, 4);
+      ctx.fillRect(4, 4, 1, 4);
+      ctx.fillRect(12, 4, 1, 4);
+      ctx.fillRect(0, 8, 1, 4);
+      ctx.fillRect(8, 8, 1, 4);
+      ctx.fillRect(4, 12, 1, 4);
+      ctx.fillRect(12, 12, 1, 4);
+    });
+
+    // ガラス
+    const glass = createPixelCanvas(ctx => {
+      ctx.fillStyle = 'rgba(210, 240, 255, 0.4)';
+      ctx.fillRect(0, 0, 16, 16);
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeRect(0.5, 0.5, 15, 15);
+      // 反射ライン
+      ctx.fillRect(3, 3, 2, 1);
+      ctx.fillRect(4, 4, 1, 2);
+      ctx.fillRect(10, 10, 3, 1);
+    });
+
+    // 金ブロック
+    const gold = createPixelCanvas(ctx => {
+      ctx.fillStyle = '#fce438';
+      ctx.fillRect(0, 0, 16, 16);
+      ctx.fillStyle = '#d4b711';
+      ctx.strokeRect(0.5, 0.5, 15, 15);
+      for (let i = 0; i < 50; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? '#fff275' : '#b89c09';
+        ctx.fillRect(Math.floor(Math.random() * 16), Math.floor(Math.random() * 16), 1, 1);
+      }
+    });
+
+    /* ==========================================================
+       3. ブロックタイプ定義 & マテリアル
+       ========================================================== */
+    const BLOCK_TYPES = {
+      1: {
+        name: '草ブロック',
+        materials: [
+          new THREE.MeshLambertMaterial({ map: grassSide.texture }), // right
+          new THREE.MeshLambertMaterial({ map: grassSide.texture }), // left
+          new THREE.MeshLambertMaterial({ map: grassTop.texture }),  // top
+          new THREE.MeshLambertMaterial({ map: dirt.texture }),      // bottom
+          new THREE.MeshLambertMaterial({ map: grassSide.texture }), // front
+          new THREE.MeshLambertMaterial({ map: grassSide.texture })  // back
+        ],
+        icon: grassSide.canvas.toDataURL(),
+        color: '#5c9636'
+      },
+      2: {
+        name: '土',
+        materials: new THREE.MeshLambertMaterial({ map: dirt.texture }),
+        icon: dirt.canvas.toDataURL(),
+        color: '#866043'
+      },
+      3: {
+        name: '石',
+        materials: new THREE.MeshLambertMaterial({ map: stone.texture }),
+        icon: stone.canvas.toDataURL(),
+        color: '#808080'
+      },
+      4: {
+        name: '原木',
+        materials: [
+          new THREE.MeshLambertMaterial({ map: woodSide.texture }),
+          new THREE.MeshLambertMaterial({ map: woodSide.texture }),
+          new THREE.MeshLambertMaterial({ map: woodTop.texture }),
+          new THREE.MeshLambertMaterial({ map: woodTop.texture }),
+          new THREE.MeshLambertMaterial({ map: woodSide.texture }),
+          new THREE.MeshLambertMaterial({ map: woodSide.texture })
+        ],
+        icon: woodSide.canvas.toDataURL(),
+        color: '#65482d'
+      },
+      5: {
+        name: '葉',
+        materials: new THREE.MeshLambertMaterial({ map: leaves.texture, transparent: true, opacity: 0.95 }),
+        icon: leaves.canvas.toDataURL(),
+        color: '#347822'
+      },
+      6: {
+        name: '木材',
+        materials: new THREE.MeshLambertMaterial({ map: planks.texture }),
+        icon: planks.canvas.toDataURL(),
+        color: '#b18c54'
+      },
+      7: {
+        name: 'レンガ',
+        materials: new THREE.MeshLambertMaterial({ map: brick.texture }),
+        icon: brick.canvas.toDataURL(),
+        color: '#b75b42'
+      },
+      8: {
+        name: 'ガラス',
+        materials: new THREE.MeshLambertMaterial({ map: glass.texture, transparent: true, opacity: 0.65 }),
+        icon: glass.canvas.toDataURL(),
+        color: '#a0d8ef'
+      },
+      9: {
+        name: '金ブロック',
+        materials: new THREE.MeshLambertMaterial({ map: gold.texture }),
+        icon: gold.canvas.toDataURL(),
+        color: '#fce438'
+      }
+    };
+
+    let selectedBlockType = 1;
+
+    /* ==========================================================
+       4. Three.js シーン・カメラ・ライト
+       ========================================================== */
+    const canvas = document.getElementById('gameCanvas');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB); // 青空
+    scene.fog = new THREE.FogExp2(0x87CEEB, 0.025);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+    // ライティング
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+    scene.add(ambientLight);
+
+    const sunLight = new THREE.DirectionalLight(0xfffaed, 0.75);
+    sunLight.position.set(50, 80, 40);
+    scene.add(sunLight);
+
+    // 雲のレイヤー
+    const cloudGeo = new THREE.PlaneGeometry(300, 300);
+    const cloudMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.5,
+      side: THREE.DoubleSide
+    });
+    const clouds = new THREE.Mesh(cloudGeo, cloudMat);
+    clouds.rotation.x = Math.PI / 2;
+    clouds.position.y = 28;
+    scene.add(clouds);
+
+    /* ==========================================================
+       5. ワールドデータ管理 & 地形生成
+       ========================================================== */
+    const WORLD_SIZE = 32;
+    const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const worldBlocks = new Map(); // key: 'x,y,z' -> Mesh
+    const blockGroup = new THREE.Group();
+    scene.add(blockGroup);
+
+    // ターゲット枠線
+    const highlightGeo = new THREE.BoxGeometry(1.004, 1.004, 1.004);
+    const highlightEdges = new THREE.EdgesGeometry(highlightGeo);
+    const highlightMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 });
+    const highlightMesh = new THREE.LineSegments(highlightEdges, highlightMat);
+    highlightMesh.visible = false;
+    scene.add(highlightMesh);
+
+    function getBlockKey(x, y, z) {
+      return `${x},${y},${z}`;
+    }
+
+    function addBlock(x, y, z, typeId, updateCount = true) {
+      const key = getBlockKey(x, y, z);
+      if (worldBlocks.has(key)) return;
+
+      const type = BLOCK_TYPES[typeId];
+      if (!type) return;
+
+      const mesh = new THREE.Mesh(blockGeometry, type.materials);
+      mesh.position.set(x, y, z);
+      mesh.userData = { x, y, z, typeId };
+      blockGroup.add(mesh);
+      worldBlocks.set(key, mesh);
+
+      if (updateCount) updateHUD();
+      return mesh;
+    }
+
+    function removeBlock(x, y, z) {
+      const key = getBlockKey(x, y, z);
+      const mesh = worldBlocks.get(key);
+      if (mesh) {
+        // パーティクル発生
+        createBreakParticles(x, y, z, mesh.userData.typeId);
+        blockGroup.remove(mesh);
+        worldBlocks.delete(key);
+        updateHUD();
+        return true;
+      }
+      return false;
+    }
+
+    // 単純なパーリン風ノイズ地形生成
+    function generateWorld() {
+      // 既存ブロックをクリア
+      while (blockGroup.children.length > 0) {
+        blockGroup.remove(blockGroup.children[0]);
+      }
+      worldBlocks.clear();
+
+      const half = WORLD_SIZE / 2;
+      const seed = Math.random() * 100;
+
+      for (let x = -half; x < half; x++) {
+        for (let z = -half; z < half; z++) {
+          // なだらかな起伏の計算
+          const nx = (x + seed) * 0.12;
+          const nz = (z + seed) * 0.12;
+          const height = Math.floor(
+            Math.sin(nx) * 2.5 +
+            Math.cos(nz) * 2.5 +
+            Math.sin(nx * 0.5 + nz * 0.5) * 2 + 5
+          );
+
+          // 最下層〜地表
+          for (let y = 0; y <= height; y++) {
+            if (y === height) {
+              addBlock(x, y, z, 1, false); // 草
+            } else if (y >= height - 2) {
+              addBlock(x, y, z, 2, false); // 土
+            } else {
+              addBlock(x, y, z, 3, false); // 石
+            }
+          }
+
+          // たまに木を生やす (周囲に余裕がある場合)
+          if (x > -half + 3 && x < half - 3 && z > -half + 3 && z < half - 3) {
+            if (Math.random() < 0.02) {
+              generateTree(x, height + 1, z);
+            }
+          }
+        }
+      }
+
+      updateHUD();
+    }
+
+    function generateTree(x, baseY, z) {
+      const trunkHeight = 4 + Math.floor(Math.random() * 2);
+      // 幹
+      for (let y = 0; y < trunkHeight; y++) {
+        addBlock(x, baseY + y, z, 4, false);
+      }
+      // 葉
+      const leafBase = baseY + trunkHeight - 1;
+      for (let lx = -2; lx <= 2; lx++) {
+        for (let lz = -2; lz <= 2; lz++) {
+          for (let ly = 0; ly <= 2; ly++) {
+            if (Math.abs(lx) === 2 && Math.abs(lz) === 2 && ly === 2) continue; // 角を落とす
+            if (lx === 0 && lz === 0 && ly < trunkHeight - leafBase) continue; // 幹の場所
+            addBlock(x + lx, leafBase + ly, z + lz, 5, false);
+          }
+        }
+      }
+      addBlock(x, leafBase + 3, z, 5, false);
+    }
+
+    /* ==========================================================
+       6. パーティクルシステム（ブロック破壊演出）
+       ========================================================== */
+    const particles = [];
+    const particleGeo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
+
+    function createBreakParticles(x, y, z, typeId) {
+      const type = BLOCK_TYPES[typeId];
+      const mat = new THREE.MeshBasicMaterial({ color: type.color || 0x888888 });
+      for (let i = 0; i < 8; i++) {
+        const p = new THREE.Mesh(particleGeo, mat);
+        p.position.set(
+          x + (Math.random() - 0.5) * 0.7,
+          y + (Math.random() - 0.5) * 0.7,
+          z + (Math.random() - 0.5) * 0.7
+        );
+        p.userData = {
+          vx: (Math.random() - 0.5) * 4,
+          vy: Math.random() * 4 + 1,
+          vz: (Math.random() - 0.5) * 4,
+          life: 1.0
+        };
+        scene.add(p);
+        particles.push(p);
+      }
+    }
+
+    function updateParticles(dt) {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.userData.life -= dt * 2.5;
+        if (p.userData.life <= 0) {
+          scene.remove(p);
+          particles.splice(i, 1);
+          continue;
+        }
+        p.userData.vy -= 15 * dt; // 重力
+        p.position.x += p.userData.vx * dt;
+        p.position.y += p.userData.vy * dt;
+        p.position.z += p.userData.vz * dt;
+        p.scale.setScalar(p.userData.life);
+      }
+    }
+
+    /* ==========================================================
+       7. プレイヤー操作 & 物理演算
+       ========================================================== */
+    const player = {
+      pos: new THREE.Vector3(0, 15, 0),
+      vel: new THREE.Vector3(0, 0, 0),
+      rot: new THREE.Euler(0, 0, 0, 'YXZ'),
+      speed: 7.5,
+      flySpeed: 14.0,
+      jumpForce: 8.5,
+      gravity: 24.0,
+      onGround: false,
+      isFlying: false,
+      height: 1.7,
+      radius: 0.35
+    };
+
+    camera.position.copy(player.pos);
+
+    const keys = {};
+    let isPointerLocked = false;
+
+    // Pointer Lock
+    const blocker = document.getElementById('blocker');
+
+    blocker.addEventListener('click', () => {
+      initAudio();
+      document.body.requestPointerLock();
+    });
+
+    document.addEventListener('pointerlockchange', () => {
+      if (document.pointerLockElement === document.body) {
+        isPointerLocked = true;
+        blocker.style.display = 'none';
+      } else {
+        isPointerLocked = false;
+        blocker.style.display = 'flex';
+      }
+    });
+
+    document.addEventListener('mousemove', e => {
+      if (!isPointerLocked) return;
+      const sensitivity = 0.0022;
+      player.rot.y -= e.movementX * sensitivity;
+      player.rot.x -= e.movementY * sensitivity;
+      // ピッチ角の制限
+      player.rot.x = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, player.rot.x));
+      camera.quaternion.setFromEuler(player.rot);
+    });
+
+    window.addEventListener('keydown', e => {
+      keys[e.code] = true;
+
+      // 数字キーでホットバー切り替え
+      if (e.key >= '1' && e.key <= '9') {
+        selectSlot(parseInt(e.key, 10));
+      }
+
+      // Fキーで飛行モード切り替え
+      if (e.code === 'KeyF') {
+        player.isFlying = !player.isFlying;
+        player.vel.set(0, 0, 0);
+        updateHUD();
+      }
+
+      // Rキーで再生成
+      if (e.code === 'KeyR') {
+        if (confirm('ワールドを再生成しますか？')) {
+          generateWorld();
+          player.pos.set(0, 16, 0);
+          player.vel.set(0, 0, 0);
+        }
+      }
+    });
+
+    window.addEventListener('keyup', e => {
+      keys[e.code] = false;
+    });
+
+    // マウスホイールでスロット切り替え
+    window.addEventListener('wheel', e => {
+      if (!isPointerLocked) return;
+      let next = selectedBlockType + (e.deltaY > 0 ? 1 : -1);
+      if (next > 9) next = 1;
+      if (next < 1) next = 9;
+      selectSlot(next);
+    });
+
+    // Raycast によるブロック破壊 & 設置
+    const raycaster = new THREE.Raycaster();
+    const screenCenter = new THREE.Vector2(0, 0);
+    let targetIntersection = null;
+
+    window.addEventListener('mousedown', e => {
+      if (!isPointerLocked) return;
+
+      // 手振りアニメーション
+      swingHand();
+
+      if (targetIntersection && targetIntersection.distance <= 6.5) {
+        const p = targetIntersection.point;
+        const n = targetIntersection.face.normal;
+
+        if (e.button === 0) {
+          // 左クリック：破壊
+          const targetBlock = targetIntersection.object;
+          removeBlock(targetBlock.userData.x, targetBlock.userData.y, targetBlock.userData.z);
+          playDigSound();
+        } else if (e.button === 2) {
+          // 右クリック：設置
+          const placeX = Math.floor(targetIntersection.object.userData.x + n.x);
+          const placeY = Math.floor(targetIntersection.object.userData.y + n.y);
+          const placeZ = Math.floor(targetIntersection.object.userData.z + n.z);
+
+          // プレイヤーの体と被っていないかチェック
+          const pMinX = player.pos.x - player.radius;
+          const pMaxX = player.pos.x + player.radius;
+          const pMinY = player.pos.y - player.height;
+          const pMaxY = player.pos.y + 0.2;
+          const pMinZ = player.pos.z - player.radius;
+          const pMaxZ = player.pos.z + player.radius;
+
+          const collideWithPlayer = (
+            placeX + 1 > pMinX && placeX < pMaxX &&
+            placeY + 1 > pMinY && placeY < pMaxY &&
+            placeZ + 1 > pMinZ && placeZ < pMaxZ
+          );
+
+          if (!collideWithPlayer) {
+            addBlock(placeX, placeY, placeZ, selectedBlockType);
+            playPlaceSound();
+          }
+        }
+      }
+    });
+
+    // コンテキストメニュー無効化 (右クリック設置のため)
+    window.addEventListener('contextmenu', e => e.preventDefault());
+
+    // 手振り演出
+    const heldCanvas = document.getElementById('heldItem');
+    function swingHand() {
+      heldCanvas.classList.remove('swing');
+      void heldCanvas.offsetWidth; // リフロー発生
+      heldCanvas.classList.add('swing');
+    }
+
+    // 衝突判定 (簡易AABB)
+    function checkCollision(x, y, z) {
+      const minX = Math.floor(x - player.radius);
+      const maxX = Math.floor(x + player.radius);
+      const minY = Math.floor(y - player.height);
+      const maxY = Math.floor(y + 0.1);
+      const minZ = Math.floor(z - player.radius);
+      const maxZ = Math.floor(z + player.radius);
+
+      for (let bx = minX; bx <= maxX; bx++) {
+        for (let by = minY; by <= maxY; by++) {
+          for (let bz = minZ; bz <= maxZ; bz++) {
+            if (worldBlocks.has(getBlockKey(bx, by, bz))) {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    }
+
+    function updatePhysics(dt) {
+      // 移動ベクトルの算出
+      const moveVec = new THREE.Vector3();
+      if (keys['KeyW']) moveVec.z -= 1;
+      if (keys['KeyS']) moveVec.z += 1;
+      if (keys['KeyA']) moveVec.x -= 1;
+      if (keys['KeyD']) moveVec.x += 1;
+      moveVec.normalize();
+
+      // カメラの水平向きに回転
+      moveVec.applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rot.y);
+
+      if (player.isFlying) {
+        // 飛行モード
+        const curSpeed = player.flySpeed;
+        player.vel.x = moveVec.x * curSpeed;
+        player.vel.z = moveVec.z * curSpeed;
+
+        if (keys['Space']) player.vel.y = curSpeed * 0.8;
+        else if (keys['ShiftLeft'] || keys['ShiftRight']) player.vel.y = -curSpeed * 0.8;
+        else player.vel.y = 0;
+
+        player.pos.addScaledVector(player.vel, dt);
+      } else {
+        // 通常サバイバル物理 (重力と床衝突)
+        const curSpeed = player.speed;
+        player.vel.x = moveVec.x * curSpeed;
+        player.vel.z = moveVec.z * curSpeed;
+
+        // 重力加算
+        player.vel.y -= player.gravity * dt;
+
+        // ジャンプ
+        if (keys['Space'] && player.onGround) {
+          player.vel.y = player.jumpForce;
+          player.onGround = false;
+          playJumpSound();
+        }
+
+        // X軸移動と衝突
+        const nextX = player.pos.x + player.vel.x * dt;
+        if (!checkCollision(nextX, player.pos.y, player.pos.z)) {
+          player.pos.x = nextX;
+        }
+
+        // Z軸移動と衝突
+        const nextZ = player.pos.z + player.vel.z * dt;
+        if (!checkCollision(player.pos.x, player.pos.y, nextZ)) {
+          player.pos.z = nextZ;
+        }
+
+        // Y軸移動と衝突
+        const nextY = player.pos.y + player.vel.y * dt;
+        if (!checkCollision(player.pos.x, nextY, player.pos.z)) {
+          player.pos.y = nextY;
+          player.onGround = false;
+        } else {
+          if (player.vel.y < 0) {
+            player.onGround = true;
+          }
+          player.vel.y = 0;
+        }
+
+        // 奈落落下防止リスポーン
+        if (player.pos.y < -20) {
+          player.pos.set(0, 15, 0);
+          player.vel.set(0, 0, 0);
+        }
+      }
+
+      camera.position.copy(player.pos);
+    }
+
+    /* ==========================================================
+       8. 視線レイキャスト & ターゲットブロックハイライト
+       ========================================================== */
+    function updateRaycast() {
+      raycaster.setFromCamera(screenCenter, camera);
+      const intersects = raycaster.intersectObjects(blockGroup.children);
+
+      if (intersects.length > 0 && intersects[0].distance <= 6.5) {
+        targetIntersection = intersects[0];
+        const block = targetIntersection.object;
+        highlightMesh.position.set(block.userData.x, block.userData.y, block.userData.z);
+        highlightMesh.visible = true;
+      } else {
+        targetIntersection = null;
+        highlightMesh.visible = false;
+      }
+    }
+
+    /* ==========================================================
+       9. UI & ホットバー構築
+       ========================================================== */
+    const hotbarEl = document.getElementById('hotbar');
+
+    function buildHotbar() {
+      hotbarEl.innerHTML = '';
+      for (let i = 1; i <= 9; i++) {
+        const type = BLOCK_TYPES[i];
+        const slot = document.createElement('div');
+        slot.className = `slot ${i === selectedBlockType ? 'active' : ''}`;
+        slot.onclick = () => selectSlot(i);
+
+        slot.innerHTML = `
+          <span class="slot-key">${i}</span>
+          <img class="slot-icon" src="${type.icon}" alt="${type.name}" title="${type.name}">
+        `;
+        hotbarEl.appendChild(slot);
+      }
+      renderHeldItem();
+    }
+
+    function selectSlot(index) {
+      if (!BLOCK_TYPES[index]) return;
+      selectedBlockType = index;
+      document.querySelectorAll('.slot').forEach((el, idx) => {
+        if (idx + 1 === index) el.classList.add('active');
+        else el.classList.remove('active');
+      });
+      renderHeldItem();
+    }
+
+    function renderHeldItem() {
+      const ctx = heldCanvas.getContext('2d');
+      ctx.clearRect(0, 0, 120, 120);
+      const type = BLOCK_TYPES[selectedBlockType];
+      if (!type) return;
+
+      const img = new Image();
+      img.onload = () => {
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, 10, 10, 100, 100);
+      };
+      img.src = type.icon;
+    }
+
+    function updateHUD() {
+      document.getElementById('posText').textContent =
+        `XYZ: ${player.pos.x.toFixed(1)}, ${player.pos.y.toFixed(1)}, ${player.pos.z.toFixed(1)}`;
+      document.getElementById('modeText').textContent =
+        `モード: ${player.isFlying ? '飛行 (クリエイティブ)' : 'サバイバル'} (Fキーで切替)`;
+      document.getElementById('blockCountText').textContent =
+        `ブロック数: ${worldBlocks.size}`;
+    }
+
+    /* ==========================================================
+       10. メインループ & リサイズ処理
+       ========================================================== */
+    let lastTime = performance.now();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const now = performance.now();
+      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
+
+      if (isPointerLocked) {
+        updatePhysics(dt);
+        updateRaycast();
+        updateHUD();
+      }
+
+      updateParticles(dt);
+
+      // 雲をゆっくり流す
+      clouds.position.x += dt * 0.5;
+      if (clouds.position.x > 150) clouds.position.x = -150;
+
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // 初期化実行
+    buildHotbar();
+    generateWorld();
+    animate();
+  </script>
+</body>
+</html>
